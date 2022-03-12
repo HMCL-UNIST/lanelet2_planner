@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  Copyright (c) 2022 Ulsan National Institute of Science and Technology (UNIST)
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<package>
+  <name>map_loader</name>
+  <version>0.1.0</version>
+  <description>Load Lanelet2 map from osm file</description>
+
+  <maintainer email="hojinlee@unist.ac.kr">Hojin Lee</maintainer>
+
+  <author email="hojinlee@unist.ac.kr">Hojin Lee</author>
+
+  <license>BSD</license>
+
+  <author>Hojin Lee</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+ 
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
+  <build_depend>cmake_modules</build_depend> 
+  <build_depend>tf</build_depend> 
+  <build_depend>pcl_ros</build_depend> 
+  <build_depend>pcl_conversions</build_depend> 
+  <build_depend>lanelet2_core</build_depend>
+  <build_depend>lanelet2_io</build_depend>
+  <build_depend>lanelet2_maps</build_depend>
+  <build_depend>lanelet2_projection</build_depend>
+  <build_depend>lanelet2_routing</build_depend>
+  <build_depend>lanelet2_traffic_rules</build_depend>
+  <build_depend>lanelet2_validation</build_depend>
+
+
+  
+  <run_depend>lanelet2_core</run_depend>
+  <run_depend>lanelet2_io</run_depend>
+  <run_depend>lanelet2_maps</run_depend>
+  <run_depend>lanelet2_projection</run_depend>
+  <run_depend>lanelet2_routing</run_depend>
+  <run_depend>lanelet2_traffic_rules</run_depend>
+  <run_depend>lanelet2_validation</run_depend>
+  <run_depend>pcl_conversions</run_depend>
+  <run_depend>pcl_ros</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>std_msgs</run_depend>
+  <run_depend>sensor_msgs</run_depend>
+  <run_depend>geometry_msgs</run_depend>
+  <run_depend>nav_msgs</run_depend>
+  <run_depend>cmake_modules</run_depend>
+  <run_depend>tf</run_depend>
+  
+
+</package>
