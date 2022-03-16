@@ -69,6 +69,9 @@ private:
 ros::NodeHandle nh_;
 ros::NodeHandle nh_p_;
 ros::Publisher g_map_pub;
+ros::Subscriber pose_callback;
+
+ 
 
 ros::Timer viz_timer;
 visualization_msgs::MarkerArray map_marker_array;
@@ -85,6 +88,10 @@ std::string osm_file_name;
 tf::StampedTransform l_sensor_to_g_sensor;
 tf::TransformListener local_transform_listener;
 
+double pose_x,pose_y,pose_z;
+bool pose_init;
+
+
 public:
 MapLoader(const ros::NodeHandle& nh, const ros::NodeHandle& nh_p);
 ~MapLoader();
@@ -92,8 +99,7 @@ MapLoader(const ros::NodeHandle& nh, const ros::NodeHandle& nh_p);
 void load_map();
 void constrcut_viz();
 void viz_pub(const ros::TimerEvent& time);
-
-
+void poseCallback(const geometry_msgs::PoseStamped& msg);
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
 

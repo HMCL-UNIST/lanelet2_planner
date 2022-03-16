@@ -287,7 +287,7 @@ visualization_msgs::MarkerArray trafficLightsAsTriangleMarkerArray(
       }
     }
   }
-  ROS_INFO("tl_count = %d",tl_count);
+  
   return (marker_array);
 }
 
@@ -350,7 +350,7 @@ visualization_msgs::MarkerArray laneletsBoundaryAsMarkerArray(lanelet::Lanelets&
     lanelet::LineString3d right_ls = lll.rightBound();    
     lanelet::ConstLineString3d center_ls = lll.centerline();
     
-    std::cout <<left_ls[0]<< std::endl;    
+      
 
     visualization_msgs::Marker left_line_strip, right_line_strip, center_line_strip;
 

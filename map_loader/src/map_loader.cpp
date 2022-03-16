@@ -44,10 +44,13 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   nh_(nh), nh_p_(nh_p)  
 {
   // using namespace lanelet;
-  
-  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
-  
   g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("lanelet2_map_viz", 1, true);
+  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
+
+  pose_init = false;
+  pose_callback = nh_.subscribe("/current_pose",1,&MapLoader::poseCallback,this);
+
+  
 
   nh_p_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
   nh_p_.getParam("osm_file_name", osm_file_name);
@@ -79,6 +82,16 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
 
 MapLoader::~MapLoader()
 {}
+
+void MapLoader::poseCallback(const geometry_msgs::PoseStamped& msg){  
+  if(!pose_init){
+    pose_init = true;
+  }
+  pose_x = msg.pose.position.x;
+  pose_y = msg.pose.position.x;
+  pose_x = msg.pose.position.x;
+
+}
 
 void MapLoader::constrcut_viz(){
   lanelet::Lanelets all_lanelets = laneletLayer(map);
