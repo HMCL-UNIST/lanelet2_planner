@@ -67,6 +67,7 @@ class MapLoader
   
 private:
 ros::NodeHandle nh_;
+ros::NodeHandle nh_p_;
 ros::Publisher g_map_pub;
 
 ros::Timer viz_timer;
@@ -85,7 +86,7 @@ tf::StampedTransform l_sensor_to_g_sensor;
 tf::TransformListener local_transform_listener;
 
 public:
-MapLoader(const ros::NodeHandle& nh);
+MapLoader(const ros::NodeHandle& nh, const ros::NodeHandle& nh_p);
 ~MapLoader();
 
 void load_map();

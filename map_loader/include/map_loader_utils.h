@@ -78,6 +78,7 @@ lanelet::Lanelets roadLanelets(lanelet::Lanelets lls)
 
 
 
+
 std::vector<std::shared_ptr<const lanelet::TrafficLight>> get_trafficLights(lanelet::Lanelets lanelets)
 { 
   std::vector<std::shared_ptr<const lanelet::TrafficLight>> tl_reg_elems;
@@ -309,7 +310,7 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
   line_strip->pose.orientation.w = 1.0;
   
   if(is_center_line){
-    line_strip->id = ctl_count;
+    line_strip->id = ctl_count+300000;
   }else{
     line_strip->id = ls.id();
   }
@@ -368,3 +369,58 @@ visualization_msgs::MarkerArray laneletsBoundaryAsMarkerArray(lanelet::Lanelets&
   return marker_array;
 }
 
+
+visualization_msgs::MarkerArray lineStringsAsMarkerArray(std::vector<lanelet::LineString3d> line_strings,
+                                        const std::string name_space, const std_msgs::ColorRGBA c)
+{
+  visualization_msgs::MarkerArray ls_marker_array;
+  for (auto i = line_strings.begin(); i != line_strings.end(); i++)
+  {
+    lanelet::ConstLineString3d ls = *i;
+    visualization_msgs::Marker ls_marker;
+
+    lineString2Marker(ls, &ls_marker, "map", name_space, c, 0.2,true);
+
+    ls_marker_array.markers.push_back(ls_marker);
+  }
+
+  return (ls_marker_array);
+}
+
+
+// return all stop and ref lines from a given lanelet
+std::vector<lanelet::LineString3d> getTrafficLightStopLine(lanelet::Lanelet ll)
+{
+  std::vector<lanelet::LineString3d> stoplines;
+
+  // find stop lines referenced by traffic lights
+  std::vector<std::shared_ptr<lanelet::TrafficLight> > traffic_light_reg_elems =
+      ll.regulatoryElementsAs<lanelet::TrafficLight>();
+
+  // lanelet has a traffic light elem element
+  for (auto reg_elem : traffic_light_reg_elems)
+  {
+    lanelet::Optional<lanelet::LineString3d> traffic_light_stopline_opt = reg_elem->stopLine();
+    if (!!traffic_light_stopline_opt)
+    {
+      stoplines.push_back(traffic_light_stopline_opt.get());
+    }
+  }
+
+  return stoplines;
+}
+
+// return all stop lines and ref lines from a given set of lanelets
+std::vector<lanelet::LineString3d> getTrafficLightStopLines(lanelet::Lanelets lanelets)
+{
+  std::vector<lanelet::LineString3d> stoplines;
+
+  for (auto lli = lanelets.begin(); lli != lanelets.end(); lli++)
+  {
+    std::vector<lanelet::LineString3d> ll_stoplines;
+    ll_stoplines = getTrafficLightStopLine(*lli);
+    stoplines.insert(stoplines.end(), ll_stoplines.begin(), ll_stoplines.end());
+  }
+
+  return stoplines;
+}

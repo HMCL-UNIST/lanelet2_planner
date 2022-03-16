@@ -24,6 +24,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <cmath>
+#include <ros/ros.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/thread/thread.hpp>
@@ -39,25 +40,25 @@
 
 
 
-MapLoader::MapLoader(const ros::NodeHandle& nh) :  
-  nh_(nh)  
+MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :  
+  nh_(nh), nh_p_(nh_p)  
 {
-  using namespace lanelet;
+  // using namespace lanelet;
   
-  viz_timer = nh_.createTimer(ros::Duration(0.1), &MapLoader::viz_pub,this);
+  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
   
   g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("lanelet2_map_viz", 1, true);
 
-  nh_.param<std::string>("map_loader/osm_file_name", osm_file_name, "Town01.osm");
-  nh_.getParam("map_loader/osm_file_name", osm_file_name);
-  nh_.param<double>("map_loader/map_origin_lat", origin_lat, 0.0);
-  nh_.param<double>("map_loader/map_origin_lon", origin_lon, 0.0);
-  nh_.param<double>("map_loader/map_origin_att", origin_att, 0.0);
+  nh_p_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
+  nh_p_.getParam("osm_file_name", osm_file_name);
+  nh_p_.param<double>("map_origin_lat", origin_lat, 0.0);
+  nh_p_.param<double>("map_origin_lon", origin_lon, 0.0);
+  nh_p_.param<double>("map_origin_att", origin_att, 0.0);
   
   load_map();
-  traffic_rules::TrafficRulesPtr trafficRules =
-  traffic_rules::TrafficRulesFactory::create(Locations::Germany, Participants::Vehicle);
-  routing::RoutingGraphUPtr routingGraph = routing::RoutingGraph::build(*map, *trafficRules);
+  lanelet::traffic_rules::TrafficRulesPtr trafficRules =
+  lanelet::traffic_rules::TrafficRulesFactory::create(lanelet::Locations::Germany, lanelet::Participants::Vehicle);
+  lanelet::routing::RoutingGraphUPtr routingGraph = lanelet::routing::RoutingGraph::build(*map, *trafficRules);
   // ConstLanelet lanelet = map->laneletLayer.get(1013);
   // routing::LaneletPaths paths = routingGraph->possiblePaths(lanelet, 100, 0, true);
   
@@ -83,15 +84,16 @@ void MapLoader::constrcut_viz(){
   lanelet::Lanelets all_lanelets = laneletLayer(map);
   lanelet::Lanelets road_lanelets = roadLanelets(all_lanelets);
   
+  
   std::vector<std::shared_ptr<const lanelet::TrafficLight>> tl_reg_elems = get_trafficLights(all_lanelets);
-
+  std::vector<lanelet::LineString3d> tl_stop_lines = getTrafficLightStopLines(road_lanelets);
   std_msgs::ColorRGBA cl_road, cl_cross, cl_ll_borders, cl_tl_stoplines, cl_ss_stoplines, cl_trafficlights;
   setColor(&cl_road, 0.2, 0.7, 0.7, 0.3);
   setColor(&cl_cross, 0.2, 0.7, 0.2, 0.3);
   setColor(&cl_ll_borders, 1.0, 1.0, 1.0, 1.0);
   setColor(&cl_tl_stoplines, 1.0, 0.5, 0.0, 0.5);
   setColor(&cl_ss_stoplines, 1.0, 0.0, 0.0, 0.5);
-  setColor(&cl_trafficlights, 0.7, 0.7, 0.7, 0.8);
+  setColor(&cl_trafficlights, 0.0, 0.0, 1.0, 0.8);
 
   
 
@@ -100,15 +102,16 @@ void MapLoader::constrcut_viz(){
   insertMarkerArray(&map_marker_array, trafficLightsAsTriangleMarkerArray(
     tl_reg_elems, cl_trafficlights));
   
-  
+  insertMarkerArray(&map_marker_array, lineStringsAsMarkerArray(
+    tl_stop_lines, "traffic_light_stop_lines", cl_tl_stoplines));
+
   // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
   //   "road_lanelets", road_lanelets, cl_road));
   // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
   //   "crosswalk_lanelets", crosswalk_lanelets, cl_cross));
   // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletDirectionAsMarkerArray(
   //   road_lanelets));
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::lineStringsAsMarkerArray(
-  //   tl_stop_lines, "traffic_light_stop_lines", cl_tl_stoplines, 0.5));
+  
   // insertMarkerArray(&map_marker_array, lanelet::visualization::lineStringsAsMarkerArray(
   //   ss_stop_lines, "stop_sign_stop_lines", cl_ss_stoplines, 0.5));
   // insertMarkerArray(&map_marker_array, lanelet::visualization::autowareTrafficLightsAsMarkerArray(
@@ -137,10 +140,10 @@ void MapLoader::load_map(){
 int main (int argc, char** argv)
 {
 ros::init(argc, argv, "MapLoader");
-ros::NodeHandle nh_map_loader;
-// ros::NodeHandle nh_route_planner;
+ros::NodeHandle nh_;
+ros::NodeHandle nh_private("~");
 
-MapLoader MapLoader_(nh_map_loader);
+MapLoader MapLoader_(nh_,nh_private);
 // RoutePlanner routePlanner_(nh_route_planner);
 ros::spin();
 }
