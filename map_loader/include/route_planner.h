@@ -54,43 +54,41 @@
 #include <lanelet2_routing/RoutingGraph.h>
 #include <lanelet2_routing/RoutingGraphContainer.h>
 #include <lanelet2_traffic_rules/TrafficRulesFactory.h>
-#include <map_loader_utils.h>
 #include <amathutils.hpp>
-#include <route_planner.h>
+
 
 #define PI 3.14159265358979323846264338
 
 
-
-class MapLoader 
+class RoutePlanner 
 {
   
 private:
-ros::NodeHandle nh_;
-ros::Publisher g_map_pub;
+// ros::Publisher sss;
 
-ros::Timer viz_timer;
-visualization_msgs::MarkerArray map_marker_array;
+// ros::Timer viz_timer;
+// visualization_msgs::MarkerArray map_marker_array;
 
-RoutePlanner rp_;
-lanelet::LaneletMapPtr map;
-double origin_lat;
-double origin_lon;
-double origin_att;
+  double tmp;
+  lanelet::LaneletMapPtr map_;
+// double origin_lat;
+// double origin_lon;
+// double origin_att;
 
-std::string osm_file_name;
+// std::string osm_file_name;
 
-// transform from local sensor frame to global sensor frame
-tf::StampedTransform l_sensor_to_g_sensor;
-tf::TransformListener local_transform_listener;
+// // transform from local sensor frame to global sensor frame
+// tf::StampedTransform l_sensor_to_g_sensor;
+// tf::TransformListener local_transform_listener;
 
 public:
-MapLoader(const ros::NodeHandle& nh);
-~MapLoader();
+RoutePlanner(); 
+~RoutePlanner();
 
-void load_map();
-void constrcut_viz();
-void viz_pub(const ros::TimerEvent& time);
+void setMap(lanelet::LaneletMapPtr map);
+// void load_map();
+// void constrcut_viz();
+// void viz_pub(const ros::TimerEvent& time);
 
 
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);

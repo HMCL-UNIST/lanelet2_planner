@@ -63,15 +63,16 @@ include_directories(
 
 SET(CMAKE_CXX_FLAGS "-O2 -g -Wall ${CMAKE_CXX_FLAGS}")
 
-add_executable(map_loader src/map_loader.cpp)
+add_executable(map_loader src/map_loader.cpp src/route_planner.cpp)
 target_link_libraries(map_loader ${catkin_LIBRARIES} ${GeographicLib_LIBRARY_DIRS}/libGeographic.so)
 add_dependencies(map_loader ${catkin_EXPORTED_TARGETS})
 
 
 
+
 install(
   TARGETS
-  map_loader    
+  map_loader  
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

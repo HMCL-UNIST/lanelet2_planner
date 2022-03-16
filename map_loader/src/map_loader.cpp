@@ -33,34 +33,42 @@
 
 
 
+
 // macro for getting the time stamp of a ros message
 #define TIME(msg) ( (msg)->header.stamp.toSec() )
 
 
 
-MapLoader::MapLoader() :  
-  nh_("~")  
+MapLoader::MapLoader(const ros::NodeHandle& nh) :  
+  nh_(nh)  
 {
   using namespace lanelet;
+  
   viz_timer = nh_.createTimer(ros::Duration(0.1), &MapLoader::viz_pub,this);
+  
   g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("lanelet2_map_viz", 1, true);
 
-  nh_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
-  nh_.param<double>("map_origin_lat", origin_lat, 0.0);
-  nh_.param<double>("map_origin_lon", origin_lon, 0.0);
-  nh_.param<double>("map_origin_att", origin_att, 0.0);
+  nh_.param<std::string>("map_loader/osm_file_name", osm_file_name, "Town01.osm");
+  nh_.getParam("map_loader/osm_file_name", osm_file_name);
+  nh_.param<double>("map_loader/map_origin_lat", origin_lat, 0.0);
+  nh_.param<double>("map_loader/map_origin_lon", origin_lon, 0.0);
+  nh_.param<double>("map_loader/map_origin_att", origin_att, 0.0);
   
   load_map();
+  traffic_rules::TrafficRulesPtr trafficRules =
+  traffic_rules::TrafficRulesFactory::create(Locations::Germany, Participants::Vehicle);
+  routing::RoutingGraphUPtr routingGraph = routing::RoutingGraph::build(*map, *trafficRules);
+  // ConstLanelet lanelet = map->laneletLayer.get(1013);
+  // routing::LaneletPaths paths = routingGraph->possiblePaths(lanelet, 100, 0, true);
+  
+  constrcut_viz();
+
+
+  rp_.setMap(map);
   // nh_.param<int>("num_of_gpsPose_for_icp", num_of_gpsPose_for_icp, 10);
   // nh_.param<bool>("record_transform", record_transform, false);  
   // nh_.param<std::string>("file_name", file_name, "carla_test_v1.csv");
-  traffic_rules::TrafficRulesPtr trafficRules =
-      traffic_rules::TrafficRulesFactory::create(Locations::Germany, Participants::Vehicle);
-  routing::RoutingGraphUPtr routingGraph = routing::RoutingGraph::build(*map, *trafficRules);
-  ConstLanelet lanelet = map->laneletLayer.get(1013);
-  routing::LaneletPaths paths = routingGraph->possiblePaths(lanelet, 100, 0, true);
-  
-  constrcut_viz();
+
   
  
 
@@ -72,9 +80,11 @@ MapLoader::~MapLoader()
 {}
 
 void MapLoader::constrcut_viz(){
-  lanelet::ConstLanelets all_lanelets = laneletLayer(map);
-  lanelet::ConstLanelets road_lanelets = roadLanelets(all_lanelets);
+  lanelet::Lanelets all_lanelets = laneletLayer(map);
+  lanelet::Lanelets road_lanelets = roadLanelets(all_lanelets);
   
+  std::vector<std::shared_ptr<const lanelet::TrafficLight>> tl_reg_elems = get_trafficLights(all_lanelets);
+
   std_msgs::ColorRGBA cl_road, cl_cross, cl_ll_borders, cl_tl_stoplines, cl_ss_stoplines, cl_trafficlights;
   setColor(&cl_road, 0.2, 0.7, 0.7, 0.3);
   setColor(&cl_cross, 0.2, 0.7, 0.2, 0.3);
@@ -86,7 +96,11 @@ void MapLoader::constrcut_viz(){
   
 
   insertMarkerArray(&map_marker_array, laneletsBoundaryAsMarkerArray(
-    road_lanelets, cl_ll_borders,true));
+    road_lanelets, cl_ll_borders));
+  insertMarkerArray(&map_marker_array, trafficLightsAsTriangleMarkerArray(
+    tl_reg_elems, cl_trafficlights));
+  
+  
   // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
   //   "road_lanelets", road_lanelets, cl_road));
   // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
@@ -104,7 +118,7 @@ void MapLoader::constrcut_viz(){
   //   all_lanelets.size(), tl_stop_lines.size() + ss_stop_lines.size(), aw_tl_reg_elems.size());
  
 }
-void MapLoader::viz_pub(const ros::TimerEvent& time){
+void MapLoader::viz_pub(const ros::TimerEvent& time){  
     g_map_pub.publish(map_marker_array);
 }
 
@@ -123,6 +137,10 @@ void MapLoader::load_map(){
 int main (int argc, char** argv)
 {
 ros::init(argc, argv, "MapLoader");
-MapLoader MapLoader_;
+ros::NodeHandle nh_map_loader;
+// ros::NodeHandle nh_route_planner;
+
+MapLoader MapLoader_(nh_map_loader);
+// RoutePlanner routePlanner_(nh_route_planner);
 ros::spin();
 }

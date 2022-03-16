@@ -2,17 +2,19 @@
 
 <launch>
 
+
   <node name="map_loader" pkg="map_loader" type="map_loader" output="screen">      
         
       <!-- <remap from="/local_to_world/gps" to="/carla/ego_vehicle/gnss/gnss1/fix"/>
       <param name="global_sensor_frame" value="ins"/> -->
-      <param name="osm_file_name" value="$(find map_loader)/maps/Town02.osm"/> 
-      <param name="map_origin_lat" value="0.0"/> 
-      <param name="map_origin_lon" value="0.0"/> 
+      
+      <param name="osm_file_name" value="$(find map_loader)/maps/test.osm"/> 
+      <param name="map_origin_lat" value="49.00345654351"/> 
+      <param name="map_origin_lon" value="8.42427590707"/> 
       <param name="map_origin_att" value="0.0"/> 
-
-
-
     
   </node>
+
+
+  
 </launch>
