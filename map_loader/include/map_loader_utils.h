@@ -32,6 +32,18 @@ void setColor(std_msgs::ColorRGBA* cl, double r, double g, double b, double a)
   cl->a = a;
 }
 
+lanelet::ConstLanelets laneletLayerConst(lanelet::LaneletMapPtr ll_map)
+{
+  lanelet::ConstLanelets lanelets;  
+
+  for (auto li = ll_map->laneletLayer.begin(); li != ll_map->laneletLayer.end(); li++)
+  {
+    lanelets.push_back(*li);
+  }
+
+  return lanelets;
+}
+
 
 lanelet::Lanelets laneletLayer(lanelet::LaneletMapPtr ll_map)
 {
@@ -66,12 +78,38 @@ lanelet::Lanelets subtypeLanelets(lanelet::Lanelets lls, const char subtype[])
   return subtype_lanelets;
 }
 
+lanelet::ConstLanelets subtypeLanelets(lanelet::ConstLanelets lls, const char subtype[])
+{
+  lanelet::ConstLanelets subtype_lanelets;
+
+  for (auto li = lls.begin(); li != lls.end(); li++)
+  {
+    lanelet::ConstLanelet ll = *li;
+
+    if (ll.hasAttribute(lanelet::AttributeName::Subtype))
+    {
+      lanelet::Attribute attr = ll.attribute(lanelet::AttributeName::Subtype);
+      if (attr.value() == subtype)
+      {
+        subtype_lanelets.push_back(ll);
+      }
+    }
+  }
+
+  return subtype_lanelets;
+}
+
 // lanelet::Lanelets crosswalkLanelets(const lanelet::Lanelets lls)
 // {
 //   return (subtypeLanelets(lls, lanelet::AttributeValueString::Crosswalk));
 // }
 
 lanelet::Lanelets roadLanelets(lanelet::Lanelets lls)
+{
+  return (subtypeLanelets(lls, lanelet::AttributeValueString::Road));
+}
+
+lanelet::ConstLanelets roadLaneletsConst(lanelet::ConstLanelets lls)
 {
   return (subtypeLanelets(lls, lanelet::AttributeValueString::Road));
 }
@@ -303,6 +341,21 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
   }
 
   line_strip->header.frame_id = frame_id;
+  // if(ls.attributeOr("lane_change","no") == "yes"){
+  //   std::cout << ls.attributeOr("lane_change","no") << std::endl;
+  // }
+  // std::cout << ls.attributeOr(lanelet::AttributeName::Subtype,lanelet::AttributeValueString::Dashed) << std::endl;
+  
+  std::string tmp_s = ls.attributeOr(lanelet::AttributeName::Subtype,lanelet::AttributeValueString::Solid);
+  if (tmp_s == "dashed"){    
+    std_msgs::ColorRGBA dashed_color;
+    setColor(&dashed_color, 1.0, 1.0, 1.0, 0.5);
+    line_strip->color = dashed_color;
+  }
+  else{
+    line_strip->color = c;
+  }
+
   line_strip->header.stamp = ros::Time();
   line_strip->ns = ns;
   line_strip->action = visualization_msgs::Marker::ADD;
@@ -313,6 +366,7 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
     line_strip->id = ctl_count+300000;
   }else{
     line_strip->id = ls.id();
+    // line_strip->id = ctl_count+500000;
   }
 
   
@@ -321,7 +375,7 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
 
   line_strip->scale.x = lss;
 
-  line_strip->color = c;
+  
 
   // fill out lane line
   for (auto i = ls.begin(); i != ls.end(); i++)
@@ -330,6 +384,7 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
     p.x = (*i).x();
     p.y = (*i).y();
     p.z = (*i).z();
+    
     line_strip->points.push_back(p);
   }
 }
@@ -424,3 +479,24 @@ std::vector<lanelet::LineString3d> getTrafficLightStopLines(lanelet::Lanelets la
 
   return stoplines;
 }
+
+
+
+int get_closest_lanelet(const lanelet::ConstLanelets & lanelets, const geometry_msgs::Pose & pose)
+{
+  double closest_distance = std::numeric_limits<double>::max();
+  int closest_index = 0;
+  for (int i = 0; i < lanelets.size(); i++) {
+    const auto & llt = lanelets.at(i);
+    const auto & point2d =
+      lanelet::Point2d(lanelet::InvalId, pose.position.x, pose.position.y)
+      .basicPoint2d();    
+    const double distance = lanelet::geometry::distanceToCenterline2d(llt, point2d);
+    if (distance < closest_distance) {
+      closest_distance = distance;
+      closest_index = i;
+    }
+  }
+  return closest_index;
+}
+

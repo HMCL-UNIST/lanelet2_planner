@@ -69,8 +69,8 @@ private:
 ros::NodeHandle nh_;
 ros::NodeHandle nh_p_;
 ros::Publisher g_map_pub;
-ros::Subscriber pose_callback;
-
+ros::Subscriber pose_sub;
+ros::Subscriber goal_sub;
  
 
 ros::Timer viz_timer;
@@ -78,6 +78,9 @@ visualization_msgs::MarkerArray map_marker_array;
 
 RoutePlanner rp_;
 lanelet::LaneletMapPtr map;
+lanelet::routing::RoutingGraphUPtr routingGraph;
+
+
 double origin_lat;
 double origin_lon;
 double origin_att;
@@ -90,6 +93,12 @@ tf::TransformListener local_transform_listener;
 
 double pose_x,pose_y,pose_z;
 bool pose_init;
+geometry_msgs::Pose cur_pose;
+geometry_msgs::Pose cur_goal;
+
+
+lanelet::Lanelets road_lanelets;
+lanelet::ConstLanelets road_lanelets_const;
 
 
 public:
@@ -99,7 +108,8 @@ MapLoader(const ros::NodeHandle& nh, const ros::NodeHandle& nh_p);
 void load_map();
 void constrcut_viz();
 void viz_pub(const ros::TimerEvent& time);
-void poseCallback(const geometry_msgs::PoseStamped& msg);
+void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
+void callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg);
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
 
