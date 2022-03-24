@@ -101,8 +101,17 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
         }
         else{
           for (int i =0; i < shortestPath.size() ; ++i ){                
-                auto & ll = shortestPath[i];
+                auto ll = shortestPath[i];
+                auto lstring = ll.centerline();                
+                // auto & x_tmp = lpoints.x();
+                // auto & y_tmp = lpoints.y();
+                // auto & z_tmp = lpoints.z();
                 ROS_INFO("id = %d",ll.id());
+                for (int j = 0; j < lstring.size(); j++ ){
+                  lanelet::ConstPoint3d p1Const = lstring[j]; 
+                  ROS_INFO("x = %f, y = %f, z = %f", p1Const.x(),p1Const.y(),p1Const.z());
+                }
+                
               }
         }
   }
