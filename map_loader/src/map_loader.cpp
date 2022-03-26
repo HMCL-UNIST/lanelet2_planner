@@ -30,65 +30,44 @@
 #include <boost/thread/thread.hpp>
 #include <vector>
 #include "map_loader.h"
-
-
-
-
-
 // macro for getting the time stamp of a ros message
 #define TIME(msg) ( (msg)->header.stamp.toSec() )
-
 
 
 MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :  
   nh_(nh), nh_p_(nh_p)  
 {
   // using namespace lanelet;
+  way_pub = nh_.advertise<hmcl_msgs::LaneArray>("/global_traj", 1, true);
   g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("/lanelet2_map_viz", 1, true);
-  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
-
+  traj_viz_pub = nh_.advertise<visualization_msgs::MarkerArray>("/global_traj_viz", 1, true);
+  
   pose_init = false;
   pose_sub = nh_.subscribe("/current_pose",1,&MapLoader::poseCallback,this);
   goal_sub = nh_.subscribe("move_base_simple/goal", 1, &MapLoader::callbackGetGoalPose, this);
 
+  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
   
-  way_pub = nh_.advertise<hmcl_msgs::LaneArray>("/global_traj", 1, true);
-
   nh_p_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
   nh_p_.getParam("osm_file_name", osm_file_name);
   nh_p_.param<double>("map_origin_lat", origin_lat, 0.0);
   nh_p_.param<double>("map_origin_lon", origin_lon, 0.0);
   nh_p_.param<double>("map_origin_att", origin_att, 0.0);
+  nh_p_.param<bool>("visualize_path", visualize_path, true);
+
+  
   
   load_map();
   lanelet::traffic_rules::TrafficRulesPtr trafficRules =
   lanelet::traffic_rules::TrafficRulesFactory::create(lanelet::Locations::Germany, lanelet::Participants::Vehicle);
   routingGraph = lanelet::routing::RoutingGraph::build(*map, *trafficRules);
-  // ConstLanelet lanelet = map->laneletLayer.get(1013);
-  // routing::LaneletPaths paths = routingGraph->possiblePaths(lanelet, 100, 0, true);
-  
-
   constrcut_viz();
-
-
   rp_.setMap(map);
-  // nh_.param<int>("num_of_gpsPose_for_icp", num_of_gpsPose_for_icp, 10);
-  // nh_.param<bool>("record_transform", record_transform, false);  
-  // nh_.param<std::string>("file_name", file_name, "carla_test_v1.csv");
-
-  
- 
-
-
   
 }
 
 MapLoader::~MapLoader()
 {}
-
-
-
-
 
 void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg){
   cur_goal = msg->pose;
@@ -100,7 +79,7 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
       lanelet::Optional<lanelet::routing::Route> route = routingGraph->getRoute(road_lanelets_const[start_closest_lane_idx], road_lanelets_const[goal_closest_lane_idx], 0);
       lanelet::routing::LaneletPath local_path = route->shortestPath();
       routingGraph->checkValidity();      
-      ROS_INFO("shortest path_s`ize = %d", local_path.size());
+      ROS_INFO("shortest path_size = %d", local_path.size());
         if(local_path.empty()){
           ROS_WARN("[MAP_LOADER] = Path is not found");        
         }
@@ -110,6 +89,10 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
           hmcl_msgs::LaneArray global_lane_array;
           global_lane_array.header.frame_id = "map";
           global_lane_array.header.stamp = ros::Time::now();
+          
+          
+          
+          
           
           ///////////////////////// Encode lanelets  /////////////////////////////////////////                        
           for (int i =0; i < local_path.size() ; ++i ){                
@@ -134,10 +117,6 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 wp_.pose.pose.position.y = p1Const.y();
                 wp_.pose.pose.position.z = p1Const.z();
                 wp_.lane_id = ll_.lane_id;
-                // wp_.pose.pose.orientation.x = ;
-                // wp_.pose.pose.orientation.y = ;
-                // wp_.pose.pose.orientation.z = ;
-                // wp_.pose.pose.orientation.w = ;
                 ll_.waypoints.push_back(wp_);
               }
 
@@ -169,16 +148,26 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 }
               }              
               global_lane_array.lanes.push_back(ll_);
+
+                
             }   
-
-
           way_pub.publish(global_lane_array);
+          
+          if(visualize_path){
+            traj_marker_array.markers.clear();            
+            std::vector<lanelet::ConstLanelet> traj_lanelets;
+            for(int i=0; i< local_path.size();i++){traj_lanelets.push_back(local_path[i]);}
+                 ROS_INFO("trajc size = %d",traj_lanelets.size());
+                    std_msgs::ColorRGBA traj_marker_color;
+                    setColor(&traj_marker_color, 0.0, 1.0, 0.0, 0.5);                        
+                  insertMarkerArray(&traj_marker_array, trajectory_draw(
+                  traj_lanelets, traj_marker_color));
+          }
         }
   }
   else{
     ROS_WARN("[MAP_LOADER] = Current pose is not initialized or map is not loaded");
-  }     
-  
+  }       
 }
 
 void MapLoader::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg){  
@@ -189,7 +178,6 @@ void MapLoader::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg){
   pose_x = msg->pose.position.x;
   pose_y = msg->pose.position.x;
   pose_x = msg->pose.position.x;
-
 }
 
 void MapLoader::constrcut_viz(){
@@ -197,9 +185,6 @@ void MapLoader::constrcut_viz(){
   lanelet::ConstLanelets all_laneletsConst = laneletLayerConst(map);
   road_lanelets = roadLanelets(all_lanelets);  
   road_lanelets_const = roadLaneletsConst(all_laneletsConst);    
-  // for(int i=0; road_lanelets.size(); i++){
-  //   road_lanelets_const.push_back(road_lanelets[i]);
-  // }  
   
   std::vector<std::shared_ptr<const lanelet::TrafficLight>> tl_reg_elems = get_trafficLights(all_lanelets);
   std::vector<lanelet::LineString3d> tl_stop_lines = getTrafficLightStopLines(road_lanelets);
@@ -211,8 +196,6 @@ void MapLoader::constrcut_viz(){
   setColor(&cl_ss_stoplines, 1.0, 0.0, 0.0, 0.5);
   setColor(&cl_trafficlights, 0.0, 0.0, 1.0, 0.8);
 
-  
-
   insertMarkerArray(&map_marker_array, laneletsBoundaryAsMarkerArray(
     road_lanelets, cl_ll_borders));
   insertMarkerArray(&map_marker_array, trafficLightsAsTriangleMarkerArray(
@@ -221,25 +204,19 @@ void MapLoader::constrcut_viz(){
   insertMarkerArray(&map_marker_array, lineStringsAsMarkerArray(
     tl_stop_lines, "traffic_light_stop_lines", cl_tl_stoplines));
 
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
-  //   "road_lanelets", road_lanelets, cl_road));
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletsAsTriangleMarkerArray(
-  //   "crosswalk_lanelets", crosswalk_lanelets, cl_cross));
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::laneletDirectionAsMarkerArray(
-  //   road_lanelets));
-  
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::lineStringsAsMarkerArray(
-  //   ss_stop_lines, "stop_sign_stop_lines", cl_ss_stoplines, 0.5));
-  // insertMarkerArray(&map_marker_array, lanelet::visualization::autowareTrafficLightsAsMarkerArray(
-  //   aw_tl_reg_elems, cl_trafficlights));
-
   ROS_INFO("Visualizing lanelet2 map with %lu lanelets, %lu stop lines",
     all_lanelets.size(), tl_stop_lines.size());
  
 }
+
+void MapLoader::traj_viz_construct(hmcl_msgs::LaneArray lane_array_){
+
+// traj_marker_array
+}
+
 void MapLoader::viz_pub(const ros::TimerEvent& time){  
     g_map_pub.publish(map_marker_array);
-    
+    traj_viz_pub.publish(traj_marker_array);
     
 }
 
@@ -250,8 +227,6 @@ void MapLoader::load_map(){
   map = load(osm_file_name, projector,&errors);
   assert(errors.empty()); 
   ROS_INFO("map loaded succesfully");
-
-
 }
 
 
@@ -260,8 +235,6 @@ int main (int argc, char** argv)
 ros::init(argc, argv, "MapLoader");
 ros::NodeHandle nh_;
 ros::NodeHandle nh_private("~");
-
 MapLoader MapLoader_(nh_,nh_private);
-// RoutePlanner routePlanner_(nh_route_planner);
 ros::spin();
 }

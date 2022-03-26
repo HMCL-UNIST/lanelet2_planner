@@ -339,7 +339,7 @@ void lineString2Marker(const lanelet::ConstLineString3d ls, visualization_msgs::
     ROS_ERROR_STREAM(__FUNCTION__ << ": line_strip is null pointer!");
     return;
   }
-
+  
   line_strip->header.frame_id = frame_id;
   // if(ls.attributeOr("lane_change","no") == "yes"){
   //   std::cout << ls.attributeOr("lane_change","no") << std::endl;
@@ -423,6 +423,28 @@ visualization_msgs::MarkerArray laneletsBoundaryAsMarkerArray(lanelet::Lanelets&
   }
   return marker_array;
 }
+
+
+visualization_msgs::MarkerArray trajectory_draw(lanelet::ConstLanelets& lanelets,
+                                                                             const std_msgs::ColorRGBA c)
+{
+  double lss = 0.2;  // line string size
+  visualization_msgs::MarkerArray marker_array;
+  std_msgs::ColorRGBA center_road_c;
+  setColor(&center_road_c, 1.0, 0.7, 0.7, 0.3);
+  for (auto li = lanelets.begin(); li != lanelets.end(); li++)
+  {
+    lanelet::ConstLanelet lll = *li;
+    lanelet::ConstLineString3d center_ls = lll.centerline();
+    visualization_msgs::Marker center_line_strip;
+    center_line_strip.lifetime = ros::Duration(0.1);
+    lineString2Marker(center_ls, &center_line_strip, "map", "center_lane_line", c, lss,true);
+    marker_array.markers.push_back(center_line_strip);    
+    // }
+  }
+  return marker_array;
+}
+
 
 
 visualization_msgs::MarkerArray lineStringsAsMarkerArray(std::vector<lanelet::LineString3d> line_strings,

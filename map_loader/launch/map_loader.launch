@@ -16,6 +16,8 @@
       <!-- <param name="map_origin_lat" value="49.00345654351"/> 
       <param name="map_origin_lon" value="8.42427590707"/>  -->
       <param name="map_origin_att" value="0.0"/> 
+      <param name="visualize_path" value="True"/> 
+      
      
   </node>
 

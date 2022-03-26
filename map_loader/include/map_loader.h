@@ -65,8 +65,6 @@
 
 #define PI 3.14159265358979323846264338
 
-
-
 class MapLoader 
 {
   
@@ -74,14 +72,16 @@ private:
 ros::NodeHandle nh_;
 ros::NodeHandle nh_p_;
 ros::Publisher g_map_pub;
+ros::Publisher traj_viz_pub;
 ros::Publisher way_pub;
 
 ros::Subscriber pose_sub;
-ros::Subscriber goal_sub;
- 
+ros::Subscriber goal_sub; 
 
 ros::Timer viz_timer;
 visualization_msgs::MarkerArray map_marker_array;
+visualization_msgs::MarkerArray traj_marker_array;
+bool visualize_path;
 
 RoutePlanner rp_;
 lanelet::LaneletMapPtr map;
@@ -103,9 +103,6 @@ bool pose_init;
 geometry_msgs::Pose cur_pose;
 geometry_msgs::Pose cur_goal;
 
-
-
-
 lanelet::Lanelets road_lanelets;
 lanelet::ConstLanelets road_lanelets_const;
 
@@ -119,6 +116,7 @@ void constrcut_viz();
 void viz_pub(const ros::TimerEvent& time);
 void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
 void callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg);
+void traj_viz_construct(hmcl_msgs::LaneArray lane_array_);
 
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
