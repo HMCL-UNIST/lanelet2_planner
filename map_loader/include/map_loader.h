@@ -27,6 +27,11 @@
 #include <ros/time.h>
 #include <std_msgs/Float64.h>
 #include <sensor_msgs/NavSatFix.h>
+#include <hmcl_msgs/Lane.h>
+#include <hmcl_msgs/LaneArray.h>
+#include <hmcl_msgs/Waypoint.h>
+#include <hmcl_msgs/Trafficlight.h>
+
 
 #include <nav_msgs/Odometry.h>
 #include <geometry_msgs/PoseStamped.h>
@@ -69,6 +74,8 @@ private:
 ros::NodeHandle nh_;
 ros::NodeHandle nh_p_;
 ros::Publisher g_map_pub;
+ros::Publisher way_pub;
+
 ros::Subscriber pose_sub;
 ros::Subscriber goal_sub;
  
@@ -97,6 +104,8 @@ geometry_msgs::Pose cur_pose;
 geometry_msgs::Pose cur_goal;
 
 
+
+
 lanelet::Lanelets road_lanelets;
 lanelet::ConstLanelets road_lanelets_const;
 
@@ -110,6 +119,7 @@ void constrcut_viz();
 void viz_pub(const ros::TimerEvent& time);
 void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
 void callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg);
+
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
 

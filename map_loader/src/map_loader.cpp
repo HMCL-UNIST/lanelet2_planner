@@ -44,13 +44,15 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   nh_(nh), nh_p_(nh_p)  
 {
   // using namespace lanelet;
-  g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("lanelet2_map_viz", 1, true);
+  g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("/lanelet2_map_viz", 1, true);
   viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
 
   pose_init = false;
   pose_sub = nh_.subscribe("/current_pose",1,&MapLoader::poseCallback,this);
   goal_sub = nh_.subscribe("move_base_simple/goal", 1, &MapLoader::callbackGetGoalPose, this);
- 
+
+  
+  way_pub = nh_.advertise<hmcl_msgs::LaneArray>("/global_traj", 1, true);
 
   nh_p_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
   nh_p_.getParam("osm_file_name", osm_file_name);
@@ -84,6 +86,10 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
 MapLoader::~MapLoader()
 {}
 
+
+
+
+
 void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg){
   cur_goal = msg->pose;
 
@@ -92,27 +98,81 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
       int goal_closest_lane_idx = get_closest_lanelet(road_lanelets_const,cur_goal);
       // lanelet::Optional<lanelet::routing::LaneletPath> route = routingGraph->shortestPath(road_lanelets[start_closest_lane_idx], road_lanelets[goal_closest_lane_idx], 1);
       lanelet::Optional<lanelet::routing::Route> route = routingGraph->getRoute(road_lanelets_const[start_closest_lane_idx], road_lanelets_const[goal_closest_lane_idx], 0);
-      lanelet::routing::LaneletPath shortestPath = route->shortestPath();
-      routingGraph->checkValidity();
-      // shortestPath->begin();
-      ROS_INFO("shortest path_s`ize = %d", shortestPath.size());
-        if(shortestPath.empty()){
+      lanelet::routing::LaneletPath local_path = route->shortestPath();
+      routingGraph->checkValidity();      
+      ROS_INFO("shortest path_s`ize = %d", local_path.size());
+        if(local_path.empty()){
           ROS_WARN("[MAP_LOADER] = Path is not found");        
         }
         else{
-          for (int i =0; i < shortestPath.size() ; ++i ){                
-                auto ll = shortestPath[i];
-                auto lstring = ll.centerline();                
-                // auto & x_tmp = lpoints.x();
-                // auto & y_tmp = lpoints.y();
-                // auto & z_tmp = lpoints.z();
-                ROS_INFO("id = %d",ll.id());
-                for (int j = 0; j < lstring.size(); j++ ){
-                  lanelet::ConstPoint3d p1Const = lstring[j]; 
-                  ROS_INFO("x = %f, y = %f, z = %f", p1Const.x(),p1Const.y(),p1Const.z());
-                }
-                
+
+          // Create base trajectory 
+          hmcl_msgs::LaneArray global_lane_array;
+          global_lane_array.header.frame_id = "map";
+          global_lane_array.header.stamp = ros::Time::now();
+          
+          ///////////////////////// Encode lanelets  /////////////////////////////////////////                        
+          for (int i =0; i < local_path.size() ; ++i ){                
+              hmcl_msgs::Lane ll_;          
+              ll_.header = global_lane_array.header;
+              ll_.lane_id = local_path[i].id();
+              double speed_limit = local_path[i].attributeOr("speed_limit",-1.0);                
+              ll_.speed_limit = speed_limit;
+              
+              // check the lane change flag      
+              std::vector<lanelet::routing::LaneletRelation> followingrelations_ = route->followingRelations(local_path[i]);
+              if( (followingrelations_.size()==0) && (i < local_path.size()-1)){ll_.lane_change_flag = true;}
+              else{ll_.lane_change_flag = false;}  
+                           
+              ///////////////////////// Encode waypoints  /////////////////////////////////////////              
+              auto lstring = local_path[i].centerline();                                                
+              for (int j = 0; j < lstring.size(); j++ ){
+                lanelet::ConstPoint3d p1Const = lstring[j]; 
+                // ROS_INFO("x = %f, y = %f, z = %f", p1Const.x(),p1Const.y(),p1Const.z());
+                hmcl_msgs::Waypoint wp_;                                    
+                wp_.pose.pose.position.x = p1Const.x();
+                wp_.pose.pose.position.y = p1Const.y();
+                wp_.pose.pose.position.z = p1Const.z();
+                wp_.lane_id = ll_.lane_id;
+                // wp_.pose.pose.orientation.x = ;
+                // wp_.pose.pose.orientation.y = ;
+                // wp_.pose.pose.orientation.z = ;
+                // wp_.pose.pose.orientation.w = ;
+                ll_.waypoints.push_back(wp_);
               }
+
+              ///////////////////////// Encode trafficlights  /////////////////////////////////////////              
+              auto trafficLightRegelems = local_path[i].regulatoryElementsAs<lanelet::TrafficLight>();
+              if(trafficLightRegelems.size()>0){
+                //////////// Encode (multiple) traffics light in a single lanelet
+                for(int i=0; i < trafficLightRegelems.size(); i++){
+                  auto tlRegelem = trafficLightRegelems[i];
+                  lanelet::ConstLineStringOrPolygon3d thelight = tlRegelem->trafficLights().front();
+                  hmcl_msgs::Trafficlight tl_;                  
+                  auto thelight_ls = thelight.lineString();     
+                  if(thelight_ls){
+                    tl_.pose.x = (thelight_ls->front().x()+thelight_ls->back().x())/2.0;
+                    tl_.pose.y = (thelight_ls->front().y()+thelight_ls->back().y())/2.0;
+                    tl_.pose.z = (thelight_ls->front().z()+thelight_ls->back().z())/2.0;                    
+                  }             
+                  auto stopline_ = tlRegelem->stopLine();
+                  if (stopline_){
+                  tl_.valid_stop_line = true;
+                  tl_.stop_line.x = (stopline_->front().x()+stopline_->back().x())/2.0;
+                  tl_.stop_line.y = (stopline_->front().y()+stopline_->back().y())/2.0;
+                  tl_.stop_line.z = (stopline_->front().z()+stopline_->back().z())/2.0;                         
+                  }else{
+                    tl_.valid_stop_line = false;                      
+                    ROS_WARN("Stop line is not defined .... !!!");
+                  } 
+                  ll_.trafficlights.push_back(tl_);
+                }
+              }              
+              global_lane_array.lanes.push_back(ll_);
+            }   
+
+
+          way_pub.publish(global_lane_array);
         }
   }
   else{

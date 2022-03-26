@@ -28,7 +28,7 @@ add_message_files(
   pathIntegralStatus.msg
   pathIntegralTiming.msg
   neuralNetLayer.msg
-  neuralNetModel.msg
+  neuralNetModel.msg  
 )
 
 generate_messages(DEPENDENCIES

@@ -24,6 +24,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   std_msgs
+  hmcl_msgs
   tf  
   pcl_conversions
   pcl_ros
@@ -42,6 +43,7 @@ catkin_package(
   roscpp 
   sensor_msgs 
   geometry_msgs 
+  hmcl_msgs
   std_msgs 
   tf  
   lanelet2_core

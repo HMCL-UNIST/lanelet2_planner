@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
-project(autoware_msgs)
+project(hmcl_msgs)
 
 find_package(catkin REQUIRED COMPONENTS
   geometry_msgs  
@@ -11,11 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
 add_message_files(
   DIRECTORY msg
   FILES
-    DTLane.msg
+    Trafficlight.msg
     Lane.msg
     LaneArray.msg
-    Waypoint.msg
-    WaypointState.msg    
+    Waypoint.msg    
 )
 
 # add_service_files(
