@@ -93,6 +93,25 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
           
           ///////////////////////// Encode lanelets  /////////////////////////////////////////                        
           int init_lane_idx = 0;
+
+          //Check if the lane change requires from the last lanelent conversion
+          int last_lane_change_lanelet_idx = local_path.size()-2;          
+          if (last_lane_change_lanelet_idx < 0)
+              {last_lane_change_lanelet_idx = 0;}
+          else{
+             while(last_lane_change_lanelet_idx >=0){            
+            std::vector<lanelet::routing::LaneletRelation> before_last_followingrelations_ = route->followingRelations(local_path[last_lane_change_lanelet_idx]);
+              if( (before_last_followingrelations_.size()==0)){
+                last_lane_change_lanelet_idx--;
+              }else{
+                last_lane_change_lanelet_idx++;
+                break;
+               }
+             }
+          }
+         
+          
+            
           for (int i =0; i < local_path.size() ; ++i ){                
               hmcl_msgs::Lane ll_;          
               ll_.header = global_lane_array.header;
@@ -126,8 +145,8 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 if(ll_.lane_change_flag){init_lane_idx++;}               
               }
               // terminal lanelet , add terminal position as the waypoint
-              if(i == local_path.size()-1){
-                waypoint_idx_finish = getClosestWaypoint(false,lstring,cur_goal);               
+              if(i >= last_lane_change_lanelet_idx){
+                waypoint_idx_finish = getClosestWaypoint(false,lstring,cur_goal);                             
               }
 
               for (int j = waypoint_idx_init; j < waypoint_idx_finish; j++ ){
@@ -137,8 +156,7 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 wp_.lane_id = ll_.lane_id;
                 wp_.pose.pose.position.x = p1Const.x();
                 wp_.pose.pose.position.y = p1Const.y();
-                wp_.pose.pose.position.z = p1Const.z();
-                
+                wp_.pose.pose.position.z = p1Const.z();                
                 
                 // point within the lanelet, Last point will have the same yaw as the previous waypoint
                 if(j < lstring.size()-1){      
@@ -146,8 +164,6 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 }else{
                   yaw_tmp = get_yaw(lstring[j-1], lstring[j]);
                 }
-
-               
 
                 tf2::Quaternion q;
                 q.setRPY(0, 0, yaw_tmp);
@@ -172,6 +188,8 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                 wp_.pose.pose.orientation.w = cur_goal.orientation.w;
                 ll_.waypoints.push_back(wp_);
               }
+              
+
 
               ///////////////////////// Encode trafficlights  /////////////////////////////////////////              
               auto trafficLightRegelems = local_path[i].regulatoryElementsAs<lanelet::TrafficLight>();
@@ -238,8 +256,8 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                       marker_tmp.color = traj_marker_color;
                       marker_tmp.lifetime = ros::Duration(0.1);
                       marker_tmp.scale.x = 0.7;
-                      marker_tmp.scale.y = 0.5;
-                      marker_tmp.scale.z = 0.3;                  
+                      marker_tmp.scale.y = 0.4;
+                      marker_tmp.scale.z = 0.1;                  
                       traj_marker_array.markers.push_back(marker_tmp);
                     }
               }
@@ -254,28 +272,28 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
 
 unsigned int MapLoader::getClosestWaypoint(bool is_start, const lanelet::ConstLineString3d &lstring, geometry_msgs::Pose& point_){
   //input is usually the center line 
-  int closest_idx=0;  
-  if (is_start){
-   closest_idx=lstring.size()-1;  
-  }
-  
-  double min_dist_ = 0.0;
+  int closest_idx=lstring.size()-1;  
+  double min_dist_ = std::numeric_limits<double>::max();  
   lanelet::ConstPoint3d end_pConst = lstring[lstring.size()-1]; 
-  double dist_from_current_to_end= sqrt(pow((end_pConst.x()-point_.position.x),2) + pow((end_pConst.y()-point_.position.y),2));     
-  for (int j = 0; j < lstring.size(); j++ ){
+    if (!is_start){
+      closest_idx=0;  
+      end_pConst = lstring[0]; 
+    }
+    double dist_from_current_to_end= sqrt(pow((end_pConst.x()-point_.position.x),2) + pow((end_pConst.y()-point_.position.y),2));      
     
-    lanelet::ConstPoint3d pConst = lstring[j]; 
-    
-    double dist_= sqrt(pow(pConst.x()-point_.position.x,2) + pow(pConst.y()-point_.position.y,2));     
-    double dist_from_tmp_to_end= sqrt(pow(pConst.x()-end_pConst.x(),2) + pow(pConst.y()-end_pConst.y(),2));     
-    
-    if( (min_dist_ >= dist_)&& (dist_from_tmp_to_end >= dist_from_current_to_end)){
-        closest_idx = j;
-        min_dist_ =  dist_;
-        ROS_INFO("index = %d, dist_from_current_to_end = %f, dist_from_tmp_to_end = %f", closest_idx, dist_from_current_to_end, dist_from_tmp_to_end);
-      }  
-     
-  }
+    for (int j = 0; j < lstring.size(); j++ ){
+      
+      lanelet::ConstPoint3d pConst = lstring[j]; 
+      
+      double dist_= sqrt(pow(pConst.x()-point_.position.x,2) + pow(pConst.y()-point_.position.y,2));     
+      double dist_from_tmp_to_end= sqrt(pow(pConst.x()-end_pConst.x(),2) + pow(pConst.y()-end_pConst.y(),2));     
+      
+      if( (min_dist_ >= dist_)&& (dist_from_tmp_to_end < dist_from_current_to_end)){
+          closest_idx = j;
+          min_dist_ =  dist_;        
+        }  
+      
+    }
   //  if((dist_from_tmp_to_end >= dist_from_current_to_end) && (closest_idx >= lstring.size()-1)){
   //       closest_idx = closest_idx+1;
   //     }

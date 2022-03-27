@@ -146,6 +146,16 @@ double getPoseYawAngle(const geometry_msgs::Pose &_pose)
   return y;
 }
 
+void wrap_yaw_rad(double & _angle){
+  while(_angle > M_PI){
+      _angle = _angle - 2*M_PI;
+    }
+    while(_angle < M_PI){
+      _angle = _angle + 2*M_PI;
+    }
+    return _angle;
+}
+
 geometry_msgs::Quaternion getQuaternionFromYaw(const double &_yaw)
 {
   tf2::Quaternion q;
