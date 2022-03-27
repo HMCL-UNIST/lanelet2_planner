@@ -99,9 +99,10 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
           if (last_lane_change_lanelet_idx < 0)
               {last_lane_change_lanelet_idx = 0;}
           else{
-             while(last_lane_change_lanelet_idx >=0){            
-            std::vector<lanelet::routing::LaneletRelation> before_last_followingrelations_ = route->followingRelations(local_path[last_lane_change_lanelet_idx]);
-              if( (before_last_followingrelations_.size()==0)){
+             while(last_lane_change_lanelet_idx >=0){
+            bool is_follows = lanelet::geometry::follows(local_path[last_lane_change_lanelet_idx],local_path[last_lane_change_lanelet_idx+1]);                  
+            std::vector<lanelet::routing::LaneletRelation> before_last_followingrelations_ = route->followingRelations(local_path[last_lane_change_lanelet_idx]);            
+              if(!is_follows){  
                 last_lane_change_lanelet_idx--;
               }else{
                 last_lane_change_lanelet_idx++;
@@ -109,20 +110,27 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
                }
              }
           }
-         
           
-            
           for (int i =0; i < local_path.size() ; ++i ){                
               hmcl_msgs::Lane ll_;          
               ll_.header = global_lane_array.header;
               ll_.lane_id = local_path[i].id();
+              ROS_INFO("laneid = %d",ll_.lane_id);
               double speed_limit = local_path[i].attributeOr("speed_limit",-1.0);                
               ll_.speed_limit = speed_limit;
               
               // check the lane change flag      
-              std::vector<lanelet::routing::LaneletRelation> followingrelations_ = route->followingRelations(local_path[i]);
-              if( (followingrelations_.size()==0) && (i < local_path.size()-1)){ll_.lane_change_flag = true;}
-              else{ll_.lane_change_flag = false;}  
+              if(i <local_path.size()-1){
+                  bool is_follows = lanelet::geometry::follows(local_path[i],local_path[i+1]);
+                  if(!is_follows){                    
+                    ll_.lane_change_flag = true;
+                  }
+              }              
+              
+              // std::vector<lanelet::routing::LaneletRelation> followingrelations_ = route->followingRelations(local_path[i]);
+              // ROS_INFO("lane idx = %d, following_size = %d", i, followingrelations_.size());
+              // if( (followingrelations_.size()==0) && (i < local_path.size()-1)){ll_.lane_change_flag = true;}
+              // else{ll_.lane_change_flag = false;}  
                            
               ///////////////////////// Encode waypoints  /////////////////////////////////////////              
               auto lstring = local_path[i].centerline();   
@@ -130,8 +138,11 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
               int waypoint_idx_init = 0;
               int waypoint_idx_finish = lstring.size();
               // initial lanelet , add current position as the waypoint
+              
               if(i==init_lane_idx){
-                waypoint_idx_init = getClosestWaypoint(true,lstring,cur_pose); 
+                waypoint_idx_init = getClosestWaypoint(true,lstring,cur_pose);                 
+                ROS_INFO("init_lane_idx = %d",init_lane_idx);
+                if(ll_.lane_change_flag){ROS_INFO("lane_change_flag true");}                
                 hmcl_msgs::Waypoint wp_;  
                 wp_.lane_id = init_lane_idx;
                 wp_.pose.pose.position.x = cur_pose.position.x;
@@ -288,7 +299,7 @@ unsigned int MapLoader::getClosestWaypoint(bool is_start, const lanelet::ConstLi
       double dist_= sqrt(pow(pConst.x()-point_.position.x,2) + pow(pConst.y()-point_.position.y,2));     
       double dist_from_tmp_to_end= sqrt(pow(pConst.x()-end_pConst.x(),2) + pow(pConst.y()-end_pConst.y(),2));     
       
-      if( (min_dist_ >= dist_)&& (dist_from_tmp_to_end < dist_from_current_to_end)){
+      if( (min_dist_ >= dist_)&& (dist_from_tmp_to_end <= dist_from_current_to_end)){
           closest_idx = j;
           min_dist_ =  dist_;        
         }  
