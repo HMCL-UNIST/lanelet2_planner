@@ -46,6 +46,8 @@
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 #include <tf/transform_listener.h>
+#include <tf2/utils.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <vector>
 
@@ -69,18 +71,16 @@ class MapLoader
 {
   
 private:
-ros::NodeHandle nh_;
-ros::NodeHandle nh_p_;
-ros::Publisher g_map_pub;
-ros::Publisher traj_viz_pub;
+ros::NodeHandle nh_, nh_p_;
+ros::Publisher g_map_pub, g_traj_lanelet_viz_pub, g_traj_viz_pub;
+
 ros::Publisher way_pub;
 
-ros::Subscriber pose_sub;
-ros::Subscriber goal_sub; 
+ros::Subscriber pose_sub, goal_sub;
 
-ros::Timer viz_timer;
-visualization_msgs::MarkerArray map_marker_array;
-visualization_msgs::MarkerArray traj_marker_array;
+ros::Timer viz_timer, g_traj_timer;
+visualization_msgs::MarkerArray map_marker_array,traj_marker_array,traj_lanelet_marker_array;
+
 bool visualize_path;
 
 RoutePlanner rp_;
@@ -91,6 +91,8 @@ lanelet::routing::RoutingGraphUPtr routingGraph;
 double origin_lat;
 double origin_lon;
 double origin_att;
+bool global_traj_available;
+hmcl_msgs::LaneArray global_lane_array;
 
 std::string osm_file_name;
 
@@ -112,12 +114,14 @@ MapLoader(const ros::NodeHandle& nh, const ros::NodeHandle& nh_p);
 ~MapLoader();
 
 void load_map();
-void constrcut_viz();
+void construct_lanelets_with_viz();
 void viz_pub(const ros::TimerEvent& time);
+void global_traj_pub(const ros::TimerEvent& time);
 void poseCallback(const geometry_msgs::PoseStampedConstPtr& msg);
 void callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg);
-void traj_viz_construct(hmcl_msgs::LaneArray lane_array_);
 
+double get_yaw(const lanelet::ConstPoint3d & _from, const lanelet::ConstPoint3d &_to );
+unsigned int getClosestWaypoint(bool is_start, const lanelet::ConstLineString3d &lstring, geometry_msgs::Pose& point_);
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
 

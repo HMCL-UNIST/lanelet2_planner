@@ -52,6 +52,8 @@ double find_distance(const geometry_msgs::Pose &_from, const geometry_msgs::Pose
   return find_distance(_from.position, _to.position);
 }
 
+
+
 double find_angle(const geometry_msgs::Point &_from, const geometry_msgs::Point &_to)
 {
   double _angle = std::atan2(_to.y - _from.y, _to.x - _from.x);
@@ -148,6 +150,9 @@ geometry_msgs::Quaternion getQuaternionFromYaw(const double &_yaw)
 {
   tf2::Quaternion q;
   q.setRPY(0, 0, _yaw);
+  q=q.normalize();
+
+
   return tf2::toMsg(q);
 }
 

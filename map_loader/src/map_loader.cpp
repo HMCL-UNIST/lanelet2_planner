@@ -40,14 +40,12 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   // using namespace lanelet;
   way_pub = nh_.advertise<hmcl_msgs::LaneArray>("/global_traj", 1, true);
   g_map_pub = nh_.advertise<visualization_msgs::MarkerArray>("/lanelet2_map_viz", 1, true);
-  traj_viz_pub = nh_.advertise<visualization_msgs::MarkerArray>("/global_traj_viz", 1, true);
+  g_traj_timer = nh_.createTimer(ros::Duration(0.5), &MapLoader::global_traj_pub,this);    
   
   pose_init = false;
   pose_sub = nh_.subscribe("/current_pose",1,&MapLoader::poseCallback,this);
   goal_sub = nh_.subscribe("move_base_simple/goal", 1, &MapLoader::callbackGetGoalPose, this);
 
-  viz_timer = nh_.createTimer(ros::Duration(0.05), &MapLoader::viz_pub,this);
-  
   nh_p_.param<std::string>("osm_file_name", osm_file_name, "Town01.osm");
   nh_p_.getParam("osm_file_name", osm_file_name);
   nh_p_.param<double>("map_origin_lat", origin_lat, 0.0);
@@ -55,13 +53,18 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   nh_p_.param<double>("map_origin_att", origin_att, 0.0);
   nh_p_.param<bool>("visualize_path", visualize_path, true);
 
+  if(visualize_path){
+    g_traj_lanelet_viz_pub = nh_.advertise<visualization_msgs::MarkerArray>("/global_traj_lanelets_viz", 1, true);
+    g_traj_viz_pub = nh_.advertise<visualization_msgs::MarkerArray>("/global_traj_viz", 1, true);
+    viz_timer = nh_.createTimer(ros::Duration(0.1), &MapLoader::viz_pub,this);    
+  }
   
-  
+  global_traj_available = false;    
   load_map();
   lanelet::traffic_rules::TrafficRulesPtr trafficRules =
   lanelet::traffic_rules::TrafficRulesFactory::create(lanelet::Locations::Germany, lanelet::Participants::Vehicle);
-  routingGraph = lanelet::routing::RoutingGraph::build(*map, *trafficRules);
-  constrcut_viz();
+  routingGraph = lanelet::routing::RoutingGraph::build(*map, *trafficRules);  
+  construct_lanelets_with_viz();
   rp_.setMap(map);
   
 }
@@ -71,7 +74,7 @@ MapLoader::~MapLoader()
 
 void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg){
   cur_goal = msg->pose;
-
+  global_lane_array.lanes.clear();
   if(pose_init && road_lanelets_const.size() > 0){
       int start_closest_lane_idx = get_closest_lanelet(road_lanelets_const,cur_pose);      
       int goal_closest_lane_idx = get_closest_lanelet(road_lanelets_const,cur_goal);
@@ -84,17 +87,12 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
           ROS_WARN("[MAP_LOADER] = Path is not found");        
         }
         else{
-
-          // Create base trajectory 
-          hmcl_msgs::LaneArray global_lane_array;
+          // Create base trajectory           
           global_lane_array.header.frame_id = "map";
-          global_lane_array.header.stamp = ros::Time::now();
-          
-          
-          
-          
+          global_lane_array.header.stamp = ros::Time::now();          
           
           ///////////////////////// Encode lanelets  /////////////////////////////////////////                        
+          int init_lane_idx = 0;
           for (int i =0; i < local_path.size() ; ++i ){                
               hmcl_msgs::Lane ll_;          
               ll_.header = global_lane_array.header;
@@ -108,15 +106,70 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
               else{ll_.lane_change_flag = false;}  
                            
               ///////////////////////// Encode waypoints  /////////////////////////////////////////              
-              auto lstring = local_path[i].centerline();                                                
-              for (int j = 0; j < lstring.size(); j++ ){
+              auto lstring = local_path[i].centerline();   
+              double yaw_tmp;               
+              int waypoint_idx_init = 0;
+              int waypoint_idx_finish = lstring.size();
+              // initial lanelet , add current position as the waypoint
+              if(i==init_lane_idx){
+                waypoint_idx_init = getClosestWaypoint(true,lstring,cur_pose); 
+                hmcl_msgs::Waypoint wp_;  
+                wp_.lane_id = init_lane_idx;
+                wp_.pose.pose.position.x = cur_pose.position.x;
+                wp_.pose.pose.position.y = cur_pose.position.y;
+                wp_.pose.pose.position.z = cur_pose.position.z;
+                wp_.pose.pose.orientation.x = cur_pose.orientation.x;
+                wp_.pose.pose.orientation.y = cur_pose.orientation.y;
+                wp_.pose.pose.orientation.z = cur_pose.orientation.z;
+                wp_.pose.pose.orientation.w = cur_pose.orientation.w;
+                ll_.waypoints.push_back(wp_);
+                if(ll_.lane_change_flag){init_lane_idx++;}               
+              }
+              // terminal lanelet , add terminal position as the waypoint
+              if(i == local_path.size()-1){
+                waypoint_idx_finish = getClosestWaypoint(false,lstring,cur_goal);               
+              }
+
+              for (int j = waypoint_idx_init; j < waypoint_idx_finish; j++ ){
                 lanelet::ConstPoint3d p1Const = lstring[j]; 
                 // ROS_INFO("x = %f, y = %f, z = %f", p1Const.x(),p1Const.y(),p1Const.z());
                 hmcl_msgs::Waypoint wp_;                                    
+                wp_.lane_id = ll_.lane_id;
                 wp_.pose.pose.position.x = p1Const.x();
                 wp_.pose.pose.position.y = p1Const.y();
                 wp_.pose.pose.position.z = p1Const.z();
-                wp_.lane_id = ll_.lane_id;
+                
+                
+                // point within the lanelet, Last point will have the same yaw as the previous waypoint
+                if(j < lstring.size()-1){      
+                  yaw_tmp = get_yaw(lstring[j], lstring[j+1]);                                    
+                }else{
+                  yaw_tmp = get_yaw(lstring[j-1], lstring[j]);
+                }
+
+               
+
+                tf2::Quaternion q;
+                q.setRPY(0, 0, yaw_tmp);
+                q=q.normalize();
+                wp_.pose.pose.orientation.x = q[0];
+                wp_.pose.pose.orientation.y = q[1];
+                wp_.pose.pose.orientation.z = q[2];
+                wp_.pose.pose.orientation.w = q[3];
+
+                ll_.waypoints.push_back(wp_);
+              }
+               // terminal lanelet , add terminal position as the waypoint
+              if(i == local_path.size()-1){                
+                hmcl_msgs::Waypoint wp_;  
+                wp_.lane_id = init_lane_idx;
+                wp_.pose.pose.position.x = cur_goal.position.x;
+                wp_.pose.pose.position.y = cur_goal.position.y;
+                wp_.pose.pose.position.z = cur_goal.position.z;
+                wp_.pose.pose.orientation.x = cur_goal.orientation.x;
+                wp_.pose.pose.orientation.y = cur_goal.orientation.y;
+                wp_.pose.pose.orientation.z = cur_goal.orientation.z;
+                wp_.pose.pose.orientation.w = cur_goal.orientation.w;
                 ll_.waypoints.push_back(wp_);
               }
 
@@ -151,23 +204,82 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
 
                 
             }   
-          way_pub.publish(global_lane_array);
+          global_traj_available = true;
+          // way_pub.publish(global_lane_array);
           
           if(visualize_path){
-            traj_marker_array.markers.clear();            
-            std::vector<lanelet::ConstLanelet> traj_lanelets;
-            for(int i=0; i< local_path.size();i++){traj_lanelets.push_back(local_path[i]);}
-                 ROS_INFO("trajc size = %d",traj_lanelets.size());
-                    std_msgs::ColorRGBA traj_marker_color;
-                    setColor(&traj_marker_color, 0.0, 1.0, 0.0, 0.5);                        
-                  insertMarkerArray(&traj_marker_array, trajectory_draw(
-                  traj_lanelets, traj_marker_color));
-          }
+              // Construct Traj_lanelet_marker 
+              traj_lanelet_marker_array.markers.clear();            
+              std::vector<lanelet::ConstLanelet> traj_lanelets;
+              for(int i=0; i< local_path.size();i++){traj_lanelets.push_back(local_path[i]);}
+                  ROS_INFO("trajc size = %d",traj_lanelets.size());
+                      std_msgs::ColorRGBA traj_marker_color;
+                      setColor(&traj_marker_color, 0.0, 1.0, 0.0, 0.5);                        
+                    insertMarkerArray(&traj_lanelet_marker_array, trajectory_draw(
+                    traj_lanelets, traj_marker_color));
+
+              // Construct Traj_marker               
+              traj_marker_array.markers.clear();
+              for(int i=0 ; i< global_lane_array.lanes.size(); i++){              
+                for( int j= 0 ; j <global_lane_array.lanes[i].waypoints.size() ; j++){
+                      visualization_msgs::Marker marker_tmp;
+                      marker_tmp.header = global_lane_array.header;
+                      marker_tmp.id = i*1000+j;
+                      marker_tmp.ns = "gtraj";
+                      marker_tmp.type = visualization_msgs::Marker::ARROW;
+                      marker_tmp.action = visualization_msgs::Marker::ADD;                  
+                      marker_tmp.pose.position.x = global_lane_array.lanes[i].waypoints[j].pose.pose.position.x;
+                      marker_tmp.pose.position.y = global_lane_array.lanes[i].waypoints[j].pose.pose.position.y;
+                      marker_tmp.pose.position.z = global_lane_array.lanes[i].waypoints[j].pose.pose.position.z;
+                      marker_tmp.pose.orientation.x = global_lane_array.lanes[i].waypoints[j].pose.pose.orientation.x;
+                      marker_tmp.pose.orientation.y = global_lane_array.lanes[i].waypoints[j].pose.pose.orientation.y;
+                      marker_tmp.pose.orientation.z = global_lane_array.lanes[i].waypoints[j].pose.pose.orientation.z;
+                      marker_tmp.pose.orientation.w = global_lane_array.lanes[i].waypoints[j].pose.pose.orientation.w;
+                      marker_tmp.color = traj_marker_color;
+                      marker_tmp.lifetime = ros::Duration(0.1);
+                      marker_tmp.scale.x = 0.7;
+                      marker_tmp.scale.y = 0.5;
+                      marker_tmp.scale.z = 0.3;                  
+                      traj_marker_array.markers.push_back(marker_tmp);
+                    }
+              }
+            
+            }
         }
   }
   else{
     ROS_WARN("[MAP_LOADER] = Current pose is not initialized or map is not loaded");
   }       
+}
+
+unsigned int MapLoader::getClosestWaypoint(bool is_start, const lanelet::ConstLineString3d &lstring, geometry_msgs::Pose& point_){
+  //input is usually the center line 
+  int closest_idx=0;  
+  if (is_start){
+   closest_idx=lstring.size()-1;  
+  }
+  
+  double min_dist_ = 0.0;
+  lanelet::ConstPoint3d end_pConst = lstring[lstring.size()-1]; 
+  double dist_from_current_to_end= sqrt(pow((end_pConst.x()-point_.position.x),2) + pow((end_pConst.y()-point_.position.y),2));     
+  for (int j = 0; j < lstring.size(); j++ ){
+    
+    lanelet::ConstPoint3d pConst = lstring[j]; 
+    
+    double dist_= sqrt(pow(pConst.x()-point_.position.x,2) + pow(pConst.y()-point_.position.y,2));     
+    double dist_from_tmp_to_end= sqrt(pow(pConst.x()-end_pConst.x(),2) + pow(pConst.y()-end_pConst.y(),2));     
+    
+    if( (min_dist_ >= dist_)&& (dist_from_tmp_to_end >= dist_from_current_to_end)){
+        closest_idx = j;
+        min_dist_ =  dist_;
+        ROS_INFO("index = %d, dist_from_current_to_end = %f, dist_from_tmp_to_end = %f", closest_idx, dist_from_current_to_end, dist_from_tmp_to_end);
+      }  
+     
+  }
+  //  if((dist_from_tmp_to_end >= dist_from_current_to_end) && (closest_idx >= lstring.size()-1)){
+  //       closest_idx = closest_idx+1;
+  //     }
+  return closest_idx;
 }
 
 void MapLoader::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg){  
@@ -180,7 +292,7 @@ void MapLoader::poseCallback(const geometry_msgs::PoseStampedConstPtr& msg){
   pose_x = msg->pose.position.x;
 }
 
-void MapLoader::constrcut_viz(){
+void MapLoader::construct_lanelets_with_viz(){
   lanelet::Lanelets all_lanelets = laneletLayer(map); 
   lanelet::ConstLanelets all_laneletsConst = laneletLayerConst(map);
   road_lanelets = roadLanelets(all_lanelets);  
@@ -209,14 +321,18 @@ void MapLoader::constrcut_viz(){
  
 }
 
-void MapLoader::traj_viz_construct(hmcl_msgs::LaneArray lane_array_){
 
-// traj_marker_array
+
+void MapLoader::global_traj_pub(const ros::TimerEvent& time){  
+  if(global_traj_available){
+    way_pub.publish(global_lane_array);  
+  }  
 }
 
 void MapLoader::viz_pub(const ros::TimerEvent& time){  
     g_map_pub.publish(map_marker_array);
-    traj_viz_pub.publish(traj_marker_array);
+    g_traj_lanelet_viz_pub.publish(traj_lanelet_marker_array);
+    g_traj_viz_pub.publish(traj_marker_array);
     
 }
 
@@ -227,6 +343,18 @@ void MapLoader::load_map(){
   map = load(osm_file_name, projector,&errors);
   assert(errors.empty()); 
   ROS_INFO("map loaded succesfully");
+}
+
+double MapLoader::get_yaw(const lanelet::ConstPoint3d & _from, const lanelet::ConstPoint3d &_to ){
+    double _angle = std::atan2(_to.y() - _from.y(), _to.x() - _from.x());
+    
+    while(_angle > M_PI){
+      _angle = _angle - 2*M_PI;
+    }
+    while(_angle < M_PI){
+      _angle = _angle + 2*M_PI;
+    }
+  return _angle;
 }
 
 

@@ -71,6 +71,9 @@ bool getIntersect(double x1, double y1, double x2, double y2, double x3,
 bool getIntersect(geometry_msgs::Point p1, geometry_msgs::Point p2, geometry_msgs::Point p3,
   geometry_msgs::Point p4, geometry_msgs::Point* intersect);
 
+
+
+
 geometry_msgs::Point getNearPtOnLine(const geometry_msgs::Point &_p, const geometry_msgs::Point &_a,
                                      const geometry_msgs::Point &_b);
 double find_distance(const geometry_msgs::Point &_from, const geometry_msgs::Point &_to);
