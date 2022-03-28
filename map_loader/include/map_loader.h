@@ -25,6 +25,8 @@
 
 #include <ros/ros.h>
 #include <ros/time.h>
+#include <ros/package.h>
+
 #include <std_msgs/Float64.h>
 #include <sensor_msgs/NavSatFix.h>
 #include <hmcl_msgs/Lane.h>
@@ -95,6 +97,7 @@ bool global_traj_available;
 hmcl_msgs::LaneArray global_lane_array;
 
 std::string osm_file_name;
+double map_road_resolution;
 
 // transform from local sensor frame to global sensor frame
 tf::StampedTransform l_sensor_to_g_sensor;
@@ -122,6 +125,7 @@ void callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg);
 
 double get_yaw(const lanelet::ConstPoint3d & _from, const lanelet::ConstPoint3d &_to );
 unsigned int getClosestWaypoint(bool is_start, const lanelet::ConstLineString3d &lstring, geometry_msgs::Pose& point_);
+void fix_and_save_osm();
 // void LocalCallback(geometry_msgs::PoseStampedConstPtr local_pose);
 
 

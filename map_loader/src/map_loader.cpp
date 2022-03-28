@@ -52,6 +52,9 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   nh_p_.param<double>("map_origin_lon", origin_lon, 0.0);
   nh_p_.param<double>("map_origin_att", origin_att, 0.0);
   nh_p_.param<bool>("visualize_path", visualize_path, true);
+  nh_p_.param<double>("map_road_resolution", map_road_resolution, 1.0);
+  
+  
 
   if(visualize_path){
     g_traj_lanelet_viz_pub = nh_.advertise<visualization_msgs::MarkerArray>("/global_traj_lanelets_viz", 1, true);
@@ -61,11 +64,19 @@ MapLoader::MapLoader(const ros::NodeHandle& nh,const ros::NodeHandle& nh_p) :
   
   global_traj_available = false;    
   load_map();
+  bool map_fix;
+  nh_p_.param<bool>("map_fix", map_fix, true);
+  if(map_fix){
+    fix_and_save_osm();    
+  }
+
   lanelet::traffic_rules::TrafficRulesPtr trafficRules =
   lanelet::traffic_rules::TrafficRulesFactory::create(lanelet::Locations::Germany, lanelet::Participants::Vehicle);
   routingGraph = lanelet::routing::RoutingGraph::build(*map, *trafficRules);  
   construct_lanelets_with_viz();
   rp_.setMap(map);
+  
+ 
   
 }
 
@@ -74,6 +85,7 @@ MapLoader::~MapLoader()
 
 void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &msg){
   cur_goal = msg->pose;
+  ROS_INFO("goal received");
   global_lane_array.lanes.clear();
   if(pose_init && road_lanelets_const.size() > 0){
       int start_closest_lane_idx = get_closest_lanelet(road_lanelets_const,cur_pose);      
@@ -114,8 +126,7 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
           for (int i =0; i < local_path.size() ; ++i ){                
               hmcl_msgs::Lane ll_;          
               ll_.header = global_lane_array.header;
-              ll_.lane_id = local_path[i].id();
-              ROS_INFO("laneid = %d",ll_.lane_id);
+              ll_.lane_id = local_path[i].id();              
               double speed_limit = local_path[i].attributeOr("speed_limit",-1.0);                
               ll_.speed_limit = speed_limit;
               
@@ -140,9 +151,7 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
               // initial lanelet , add current position as the waypoint
               
               if(i==init_lane_idx){
-                waypoint_idx_init = getClosestWaypoint(true,lstring,cur_pose);                 
-                ROS_INFO("init_lane_idx = %d",init_lane_idx);
-                if(ll_.lane_change_flag){ROS_INFO("lane_change_flag true");}                
+                waypoint_idx_init = getClosestWaypoint(true,lstring,cur_pose);                                                 
                 hmcl_msgs::Waypoint wp_;  
                 wp_.lane_id = init_lane_idx;
                 wp_.pose.pose.position.x = cur_pose.position.x;
@@ -240,8 +249,7 @@ void MapLoader::callbackGetGoalPose(const geometry_msgs::PoseStampedConstPtr &ms
               // Construct Traj_lanelet_marker 
               traj_lanelet_marker_array.markers.clear();            
               std::vector<lanelet::ConstLanelet> traj_lanelets;
-              for(int i=0; i< local_path.size();i++){traj_lanelets.push_back(local_path[i]);}
-                  ROS_INFO("trajc size = %d",traj_lanelets.size());
+              for(int i=0; i< local_path.size();i++){traj_lanelets.push_back(local_path[i]);}                  
                       std_msgs::ColorRGBA traj_marker_color;
                       setColor(&traj_marker_color, 0.0, 1.0, 0.0, 0.5);                        
                     insertMarkerArray(&traj_lanelet_marker_array, trajectory_draw(
@@ -386,6 +394,101 @@ double MapLoader::get_yaw(const lanelet::ConstPoint3d & _from, const lanelet::Co
   return _angle;
 }
 
+void MapLoader::fix_and_save_osm(){  
+  
+   for (auto li = map->laneletLayer.begin(); li != map->laneletLayer.end(); li++)
+  {      // li = lanelet::Lanelet       
+        if (li->hasAttribute(lanelet::AttributeName::Subtype))
+        {
+          lanelet::Attribute attr = li->attribute(lanelet::AttributeName::Subtype);
+          if (attr.value() == lanelet::AttributeValueString::Road)
+          {           
+            auto iter_l =  li->leftBound().begin();                      
+            double dist_;            
+            int count = 0;            
+            while(count < 10000){              
+                auto iter_l =  li->leftBound().begin();  
+                lanelet::Point3d p_l = *next(li->leftBound().begin(),count);
+                lanelet::Point3d p_end = *next(li->leftBound().begin(),li->leftBound().size()-1);
+                double dist_to_end_point =  lanelet::geometry::distance(p_l,p_end);     
+                if( dist_to_end_point <= 1 )                  
+                    {break;}
+                 // ->leftBound()[idx];                    
+                lanelet::Point3d p_left  = *next(li->leftBound().begin(),count);
+                lanelet::Point3d p_right = *next(li->leftBound().begin(),count+1);                   
+                dist_ =  lanelet::geometry::distance(p_left,p_right);                  
+                if(dist_ > map_road_resolution){                  
+                  // lanelet::Point3d new_pt = p_left;
+                   double x = (p_left.x() + p_right.x())/2.0;                   
+                    double y = (p_left.y() + p_right.y())/2.0;
+                    double z = (p_left.z() + p_right.z())/2.0;
+                    lanelet::Point3d new_pt{lanelet::utils::getId(), x,y,z};    
+                    double local_x_l = p_left.attributeOr("local_x",0.0);                    
+                    double local_x_r =  p_right.attributeOr("local_x",0.0);
+                    double local_y_l = p_left.attributeOr("local_y",0.0);                    
+                    double local_y_r =  p_right.attributeOr("local_y",0.0);
+                    std::string mgrs_code = p_left.attributeOr("mgrs_code","MGRS");        
+                    new_pt.attributes()["local_x"] = (local_x_l +local_x_r)/2.0;
+                    new_pt.attributes()["local_y"] = (local_y_l +local_y_r)/2.0;                    
+                    new_pt.attributes()["mgrs_code"] = mgrs_code;                    
+                    map->add(new_pt);
+                    iter_l = next(iter_l,count+1);
+                    li->leftBound().insert(iter_l,new_pt);                                          
+                }else{                  
+                  count=count+1;
+                  //  iter_l =next(iter_l,1);
+                }
+            }
+
+            count = 0;
+            auto iter_r =  li->rightBound().begin();   
+            while(count < 10000){              
+                auto iter_r =  li->rightBound().begin();  
+                lanelet::Point3d p_l = *next(li->rightBound().begin(),count);
+                lanelet::Point3d p_end = *next(li->rightBound().begin(),li->rightBound().size()-1);
+                double dist_to_end_point =  lanelet::geometry::distance(p_l,p_end);     
+                if( dist_to_end_point <= 1 )                  
+                    {break;}                                 
+                lanelet::Point3d p_left  = *next(li->rightBound().begin(),count);
+                lanelet::Point3d p_right = *next(li->rightBound().begin(),count+1);                   
+                dist_ =  lanelet::geometry::distance(p_left,p_right);                  
+                if(dist_ > map_road_resolution){                  
+                  // lanelet::Point3d new_pt = p_left;
+                   double x = (p_left.x() + p_right.x())/2.0;                   
+                    double y = (p_left.y() + p_right.y())/2.0;
+                    double z = (p_left.z() + p_right.z())/2.0;
+                    lanelet::Point3d new_pt{lanelet::utils::getId(), x,y,z};    
+                    double local_x_l = p_left.attributeOr("local_x",0.0);                    
+                    double local_x_r =  p_right.attributeOr("local_x",0.0);
+                    double local_y_l = p_left.attributeOr("local_y",0.0);                    
+                    double local_y_r =  p_right.attributeOr("local_y",0.0);
+                    std::string mgrs_code = p_left.attributeOr("mgrs_code","MGRS");        
+                    new_pt.attributes()["local_x"] = (local_x_l +local_x_r)/2.0;
+                    new_pt.attributes()["local_y"] = (local_y_l +local_y_r)/2.0;                    
+                    new_pt.attributes()["mgrs_code"] = mgrs_code;                                       
+                    map->add(new_pt);
+                    iter_r = next(iter_r,count+1);
+                    li->rightBound().insert(iter_r,new_pt);                                          
+                }else{                  
+                  count=count+1;                  
+                } 
+            } // For each lanelet
+          }// subtype road       
+        } // Subtype exist 
+     
+  }
+
+
+  
+  ROS_INFO("map save init");
+  lanelet::projection::UtmProjector projector(lanelet::Origin({origin_lat, origin_lon ,origin_att}));  
+  std::string delimiter = ".osm";
+  std::string package_path = ros::package::getPath("map_loader");
+  std::string token = osm_file_name.substr(0, osm_file_name.find(delimiter)); // token is "scott"
+  std::string osm_file_name_fixed =  token + "_fix.osm";  
+  write(osm_file_name_fixed, *map,projector);
+  ROS_INFO("map svae complete");
+}
 
 int main (int argc, char** argv)
 {

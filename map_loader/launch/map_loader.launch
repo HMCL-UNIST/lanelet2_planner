@@ -9,6 +9,8 @@
       <param name="global_sensor_frame" value="ins"/> -->
       
       <param name="osm_file_name" value="$(find map_loader)/maps/r_Town03_hj_traffic.osm"/> 
+      <!-- <param name="osm_file_name" value="$(find map_loader)/maps/map_save.osm"/>  -->
+      
       <!-- <param name="map_origin_lat" value="0.002330359333808985"/> 
       <param name="map_origin_lon" value="4.5103238454623815"/>   -->
       <param name="map_origin_lat" value="0.0"/> 
@@ -17,6 +19,9 @@
       <param name="map_origin_lon" value="8.42427590707"/>  -->
       <param name="map_origin_att" value="0.0"/> 
       <param name="visualize_path" value="True"/> 
+      <param name="map_fix" value="True"/> 
+      <param name="map_road_resolution" value="5.0"/> 
+
       
      
   </node>
